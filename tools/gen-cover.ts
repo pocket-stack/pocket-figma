@@ -1,16 +1,17 @@
-// tools/gen-cover.ts — render the XMB cover art straight from the .fig.
+// tools/gen-cover.ts — render the XMB cover art.
 //
 //   bun tools/gen-cover.ts [--fig=<path to .fig>]
 //
-// No hand-drawn assets, no ImageMagick: the EBOOT's art IS the file it views,
-// rendered by the same compile-time rasterizer (fig.ts) that bakes the tiles.
+// No hand-drawn assets, no ImageMagick:
 //
-//   art/ICON0.png  144x80   the Paper Kit smiley-document logo (the "Icon
-//                           Master" instance on the Welcome card), framed by
-//                           the card's own whitespace
+//   art/ICON0.png  144x80   the Figma logo mark — the app is a Figma viewer,
+//                           so the XMB tile says Figma, not the kit it happens
+//                           to ship. Five path fills, drawn right here.
 //   art/PIC1.png   480x272  the Welcome page "Cover" frame — the "Wireframe
 //                           PAPER KIT made by METHOD" hero — center-cropped
-//                           to cover the PSP screen
+//                           to cover the PSP screen, rendered from the .fig by
+//                           the same compile-time rasterizer (fig.ts) that
+//                           bakes the tiles.
 //
 // Both are also copied into crates/pocket-figma-psp/assets/ (the relative
 // paths Psp.toml hands to pack-pbp at `cargo psp` time) and COMMITTED, like
@@ -20,7 +21,7 @@
 
 import { homedir } from "node:os";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { createCanvas, ImageData } from "@napi-rs/canvas";
+import { createCanvas, ImageData, Path2D, type Canvas } from "@napi-rs/canvas";
 import { openFig, renderRegion, type FigDoc, type RenderedRegion } from "./fig.ts";
 
 const REPO = new URL("../", import.meta.url).pathname;
@@ -96,6 +97,15 @@ function renderCentered(
   return renderRegion(doc, pageIndex, cx - w / 2, cy - h / 2, w, h, scale);
 }
 
+function savePng(name: string, canvas: Canvas): void {
+  const png = canvas.toBuffer("image/png");
+  mkdirSync(ART, { recursive: true });
+  mkdirSync(ASSETS, { recursive: true });
+  writeFileSync(ART + name, png);
+  writeFileSync(ASSETS + name, png);
+  console.log(`gen-cover: art/${name} (${canvas.width}x${canvas.height}, ${png.length} bytes) -> also ${ASSETS.slice(REPO.length)}${name}`);
+}
+
 function writePng(name: string, r: RenderedRegion, outW: number, outH: number): void {
   if (r.width !== outW || r.height !== outH) {
     console.error(`gen-cover: ${name} rendered ${r.width}x${r.height}, expected ${outW}x${outH}`);
@@ -108,12 +118,39 @@ function writePng(name: string, r: RenderedRegion, outW: number, outH: number): 
     0,
     0,
   );
-  const png = canvas.toBuffer("image/png");
-  mkdirSync(ART, { recursive: true });
-  mkdirSync(ASSETS, { recursive: true });
-  writeFileSync(ART + name, png);
-  writeFileSync(ASSETS + name, png);
-  console.log(`gen-cover: art/${name} (${outW}x${outH}, ${png.length} bytes) -> also ${ASSETS.slice(REPO.length)}${name}`);
+  savePng(name, canvas);
+}
+
+// ---------------------------------------------------------------------------
+// ICON0 — the Figma logo mark on a dark tile, the same composition as Figma's
+// own app icon. The mark is five path fills in a 200x300 box (the canonical
+// brand SVG geometry); we scale it to 70% of the tile height and center it.
+// ---------------------------------------------------------------------------
+
+const FIGMA_MARK: ReadonlyArray<readonly [color: string, path: string]> = [
+  ["#f24e1e", "M0 50C0 22.4 22.4 0 50 0h50v100H50C22.4 100 0 77.6 0 50z"],
+  ["#ff7262", "M100 0h50c27.6 0 50 22.4 50 50s-22.4 50-50 50h-50V0z"],
+  ["#a259ff", "M0 150c0-27.6 22.4-50 50-50h50v100H50c-27.6 0-50-22.4-50-50z"],
+  ["#1abcfe", "M100 150c0-27.6 22.4-50 50-50s50 22.4 50 50-22.4 50-50 50-50-22.4-50-50z"],
+  ["#0acf83", "M50 300c27.6 0 50-22.4 50-50v-50H50c-27.6 0-50 22.4-50 50s22.4 50 50 50z"],
+];
+
+function renderIcon(outW: number, outH: number): Canvas {
+  const canvas = createCanvas(outW, outH);
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#0d0d0d";
+  ctx.fillRect(0, 0, outW, outH);
+  const markH = outH * 0.7;
+  const scale = markH / 300;
+  ctx.save();
+  ctx.translate((outW - 200 * scale) / 2, (outH - markH) / 2);
+  ctx.scale(scale, scale);
+  for (const [color, d] of FIGMA_MARK) {
+    ctx.fillStyle = color;
+    ctx.fill(new Path2D(d));
+  }
+  ctx.restore();
+  return canvas;
 }
 
 // ---------------------------------------------------------------------------
@@ -125,23 +162,10 @@ if (pageIndex < 0) {
   process.exit(1);
 }
 
-// ICON0 — the smiley-document logo. Two "Icon Master" instances live on the
-// Welcome page (the card's 219px one and the Cover frame's 127px one); take
-// the largest. The icon fills 90% of the 80px height and the crop stays
-// inside its host card, so the framing is the card's own paper white.
-const icons = findAbs(doc, pageIndex, "INSTANCE", "Icon Master", 4);
-if (icons.length === 0) {
-  console.error("gen-cover: no 'Icon Master' instance on the Welcome page");
-  process.exit(1);
-}
-const icon = icons.reduce((a, b) => (b.w * b.h > a.w * a.h ? b : a));
-const iconScale = (ICON_H * 0.9) / icon.h;
-writePng(
-  "ICON0.png",
-  renderCentered(doc, pageIndex, icon.x + icon.w / 2, icon.y + icon.h / 2, ICON_W, ICON_H, iconScale),
-  ICON_W,
-  ICON_H,
-);
+// ICON0 — the Figma logo mark. This is the tile the XMB shows in the game
+// list; it should say what the app IS (a Figma viewer), not which kit it
+// happens to ship.
+savePng("ICON0.png", renderIcon(ICON_W, ICON_H));
 
 // PIC1 — the 1920x960 "Cover" hero, scaled to COVER 480x272 (16:9 -> 30:17
 // center-crops a little off each side).
