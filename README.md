@@ -50,6 +50,9 @@ them from a local copy of the .fig (`--fig=<path>`, defaults to
 the XMB art: the icon is the Figma logo mark, drawn by the script itself; the
 backdrop is the kit's own cover, rendered from the .fig.
 
+<img src="docs/figma-psp-xmb.png" alt="The PSP's XMB game menu on real hardware: the Pocket Figma icon selected over the wave background, with OpenStrike below" width="100%" />
+
+The result on a real PSP's game menu, screenshotted on the hardware itself.
 Real hardware needs custom firmware; PPSSPP runs the EBOOT as-is.
 
 ## Layout
