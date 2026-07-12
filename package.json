@@ -7,7 +7,11 @@
     "bake": "bun tools/gen-assets.ts",
     "build": "bun vendor/pocketjs/scripts/build.ts app/main.tsx --outdir=dist",
     "psp": "bun scripts/psp.ts",
+    "vita": "bun scripts/vita.ts",
     "desktop": "bun scripts/desktop.ts",
+    "golden": "bun test/golden.ts",
+    "golden:update": "UPDATE=1 bun test/golden.ts",
+    "e2e:vita": "bun scripts/e2e-vita.ts",
     "cover": "bun tools/gen-cover.ts"
   }
 }

@@ -79,6 +79,12 @@ the run button, the store hides the download.
   `icon0` (144×80 PNG shown in the XMB), `pic1` (480×272 PNG backdrop),
   `memoryBudgetMb` (audited high-water the app promises to stay under —
   the store shows it, hardware CI enforces it).
+- `vita`: `crate` (the VPK bin crate), `titleId` (nine uppercase ASCII
+  letters/digits), `title` (LiveArea bubble name), `icon0` (128×128 PNG),
+  `viewport` (`logical`, `physical`, and `scale`; PocketJS apps normally keep
+  the 480×272 logical canvas and stretch it exactly 2× across Vita's 960×544
+  display), `touch` (whether the app binds either touchscreen), and
+  `memoryBudgetMb`.
 - `desktop`: `host` — which vendored host runs it (`uihost` today).
 - `web`: `host` — `host-web` today.
 

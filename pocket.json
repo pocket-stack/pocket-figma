@@ -6,8 +6,10 @@
   "name": "pocket-figma",
   "title": "Pocket Figma",
   "version": "0.1.0",
-  "description": "A Figma file viewer for the Sony PSP. The Paper Wireframe Kit — 14,430 nodes, 2,293 component instances, handwriting fonts and all — baked at compile time into streamed CLUT8 tile pyramids, panned with the analog nub at 60 fps.",
-  "authors": [{ "name": "Yifeng \"Evan\" Wang", "url": "https://github.com/doodlewind" }],
+  "description": "A Figma file viewer for Sony PSP and PS Vita. The Paper Wireframe Kit — 14,430 nodes, 2,293 component instances, handwriting fonts and all — baked at compile time into streamed CLUT8 tile pyramids, panned with the analog nub or left stick at 60 fps.",
+  "authors": [
+    { "name": "Yifeng \"Evan\" Wang", "url": "https://github.com/doodlewind" }
+  ],
   "license": "MIT",
   "repository": "https://github.com/pocket-stack/pocket-figma",
 
@@ -44,6 +46,19 @@
       "icon0": "art/ICON0.png",
       "pic1": "art/PIC1.png",
       "memoryBudgetMb": 20
+    },
+    "vita": {
+      "crate": "crates/pocket-figma-vita",
+      "titleId": "PFIG00001",
+      "title": "Pocket Figma",
+      "icon0": "art/vita/ICON0.png",
+      "viewport": {
+        "logical": [480, 272],
+        "physical": [960, 544],
+        "scale": "stretch"
+      },
+      "touch": false,
+      "memoryBudgetMb": 64
     },
     "desktop": { "host": "uihost" },
     "web": { "host": "host-web" }

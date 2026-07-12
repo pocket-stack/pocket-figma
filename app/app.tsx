@@ -10,11 +10,17 @@
 // own derived geometry — no Figma runtime, no fonts, no network.
 
 import { createSignal } from "solid-js";
-import { DeepZoom, Text, View, type DeepZoomView, type TileDoc } from "@pocketjs/framework/components";
+import {
+  DeepZoom,
+  Text,
+  View,
+  type DeepZoomView,
+  type NodeMirror,
+  type TileDoc,
+} from "@pocketjs/framework/components";
+import { BTN } from "@pocketjs/framework/input";
 import { onButtonPress } from "@pocketjs/framework/lifecycle";
 import * as hot from "@pocketjs/framework/hot";
-import type { NodeMirror } from "@pocketjs/framework";
-import { BTN } from "../vendor/pocketjs/spec/spec.ts";
 import { PAGES, TILE } from "./tiles.ts";
 
 /** Baked manifest -> the DeepZoom engine's document shape. */
@@ -32,7 +38,9 @@ export default function App() {
   let zoomLabel: NodeMirror | undefined;
 
   onButtonPress(BTN.TRIANGLE, () => setPage((p) => (p + 1) % DOCS.length));
-  onButtonPress(BTN.SQUARE, () => setPage((p) => (p + DOCS.length - 1) % DOCS.length));
+  onButtonPress(BTN.SQUARE, () =>
+    setPage((p) => (p + DOCS.length - 1) % DOCS.length),
+  );
 
   // Per-frame zoom readout bypasses Solid (hot.text gates on change) — a
   // trigger-held zoom would otherwise re-render the HUD 60x/s on QuickJS.
@@ -47,7 +55,9 @@ export default function App() {
           never relayout (see src/hot.ts rules) */}
       <View class="absolute left-0 right-0 bottom-0 h-7 flex-row items-center justify-between bg-slate-900 px-2">
         <Text class="text-xs text-white">{DOCS[page()].name}</Text>
-        <Text class="text-xs text-slate-400">TRI/SQR page  R/L zoom  X fit</Text>
+        <Text class="text-xs text-slate-400">
+          {"TRI/SQR page  R/L zoom  X fit"}
+        </Text>
         <Text
           class="text-xs text-white"
           style={{ width: 44, height: 14 }}
