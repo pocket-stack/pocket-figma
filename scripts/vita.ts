@@ -7,11 +7,16 @@
 
 import { $ } from "bun";
 import { cpSync, existsSync, mkdirSync } from "node:fs";
+import {
+  compilePocketTarget,
+  nativePlanEnvironment,
+} from "./pocket-plan.ts";
 
 const repo = new URL("..", import.meta.url).pathname;
 const home = process.env.HOME ?? "";
 const crate = `${repo}crates/pocket-figma-vita/`;
 const argv = Bun.argv.slice(2);
+const target = "vita";
 
 const release = argv.includes("-r") || argv.includes("--release");
 const features: string[] = [];
@@ -41,10 +46,8 @@ if (!existsSync(rustup) || !Bun.which("cargo-vita")) {
   process.exit(1);
 }
 
-console.log("pocket-figma vita: building the JS bundle");
-await $`bun vendor/pocketjs/scripts/build.ts app/main.tsx --outdir=dist`.cwd(
-  repo,
-);
+console.log("pocket-figma vita: resolving, checking, and compiling pocket.json");
+const plan = await compilePocketTarget(target);
 
 const profile = release ? "release" : "debug";
 const cargoArgs: string[] = [];
@@ -66,6 +69,7 @@ const env = {
   CC_armv7_sony_vita_newlibeabihf: "arm-vita-eabi-gcc",
   TARGET_CXX: "arm-vita-eabi-g++",
   CXX_armv7_sony_vita_newlibeabihf: "arm-vita-eabi-g++",
+  ...nativePlanEnvironment(plan),
 };
 
 console.log(`pocket-figma vita: cargo vita (${profile})`);
@@ -73,14 +77,14 @@ await $`${rustup} run ${toolchain} cargo vita build vpk -- ${cargoArgs}`
   .cwd(crate)
   .env(env);
 
-const target = `${crate}target/armv7-sony-vita-newlibeabihf/${profile}/`;
+const targetDirectory = `${crate}target/armv7-sony-vita-newlibeabihf/${profile}/`;
 const artifact = [
-  `${target}pocket-figma-vita.vpk`,
-  `${target}pocket_figma_vita.vpk`,
+  `${targetDirectory}pocket-figma-vita.vpk`,
+  `${targetDirectory}pocket_figma_vita.vpk`,
 ].find(existsSync);
 if (!artifact) {
   console.error(
-    `cargo-vita completed but no Pocket Figma VPK was found under ${target}`,
+    `cargo-vita completed but no Pocket Figma VPK was found under ${targetDirectory}`,
   );
   process.exit(1);
 }

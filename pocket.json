@@ -1,78 +1,47 @@
 {
-  "$schema": "https://pocket-stack.dev/schema/pocket-1.json",
-  "pocket": 1,
-
+  "$schema": "https://pocket-stack.dev/schema/pocket-2.json",
+  "pocket": 2,
   "id": "dev.pocket-stack.figma",
   "name": "pocket-figma",
   "title": "Pocket Figma",
   "version": "0.1.0",
-  "description": "A Figma file viewer for Sony PSP and PS Vita. The Paper Wireframe Kit — 14,430 nodes, 2,293 component instances, handwriting fonts and all — baked at compile time into streamed CLUT8 tile pyramids, panned with the analog nub or left stick at 60 fps.",
-  "authors": [
-    { "name": "Yifeng \"Evan\" Wang", "url": "https://github.com/doodlewind" }
-  ],
-  "license": "MIT",
-  "repository": "https://github.com/pocket-stack/pocket-figma",
-
   "engine": {
-    "pocketjs": ">=0.4.0-0",
-    "capabilities": ["ui", "deepzoom", "analog"]
+    "abi": 1,
+    "capabilities": {
+      "requires": [
+        { "id": "ui.drawlist", "version": 1 },
+        { "id": "text.glyphs.baked", "version": 1 },
+        { "id": "input.buttons", "version": 1 },
+        {
+          "id": "input.analog",
+          "version": 1,
+          "parameters": { "sticks": 1 }
+        }
+      ]
+    }
   },
-
   "app": {
     "entry": "app/main.tsx",
+    "output": "main",
     "framework": "solid",
-    "kind": "viewer",
-    "simulationHz": 60
+    "simulationHz": 60,
+    "viewport": {
+      "logical": [480, 272],
+      "presentation": "integer-fit"
+    }
   },
-
-  "assets": {
-    "bake": "bun tools/gen-assets.ts",
-    "prebaked": ["app/tiles", "app/pak.json", "app/tiles.ts"],
-    "sources": [
-      {
-        "name": "Paper Wireframe Kit (Community).fig",
-        "origin": "https://www.figma.com/community/file/1075811850250564922",
-        "author": "Method (Tyler Sharpe & Claire Lorman)",
-        "license": "CC BY 4.0",
-        "note": "Not committed — the baked outputs above are; re-baking needs the .fig locally."
-      }
-    ]
-  },
-
-  "targets": {
+  "packages": {
     "psp": {
-      "crate": "crates/pocket-figma-psp",
       "title": "Pocket Figma",
       "icon0": "art/ICON0.png",
       "pic1": "art/PIC1.png",
       "memoryBudgetMb": 20
     },
     "vita": {
-      "crate": "crates/pocket-figma-vita",
-      "titleId": "PFIG00001",
       "title": "Pocket Figma",
+      "titleId": "PFIG00001",
       "icon0": "art/vita/ICON0.png",
-      "viewport": {
-        "logical": [480, 272],
-        "physical": [960, 544],
-        "scale": "stretch"
-      },
-      "touch": false,
       "memoryBudgetMb": 64
-    },
-    "desktop": { "host": "uihost" },
-    "web": { "host": "host-web" }
-  },
-
-  "store": {
-    "categories": ["design", "viewers"],
-    "tags": ["figma", "wireframe", "deep-zoom", "design-tools"],
-    "icon": "art/store-icon.png",
-    "screenshots": [
-      "art/shots/psp-fit.png",
-      "art/shots/psp-zoomed.png",
-      "art/shots/desktop.png"
-    ],
-    "privacy": { "network": "none", "storage": "none" }
+    }
   }
 }

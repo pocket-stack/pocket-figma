@@ -1,4 +1,5 @@
 node_modules/
+.pocket/
 dist/*.js
 dist/*.pak
 dist/EBOOT.PBP

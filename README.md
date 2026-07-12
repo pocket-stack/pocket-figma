@@ -39,6 +39,7 @@ reference instance of the [Pocket app manifest](./docs/manifest.md).
 
 ```sh
 bun run setup         # submodules + vendored deps
+bun run check:platforms  # validate the PSP baseline against PSP and Vita
 bun run build         # dist/main.js + dist/main.pak (bundle + baked tiles)
 bun run psp -- -r     # dist/EBOOT.PBP — copy to ms0:/PSP/GAME/PocketFigma/
 bun run vita -- -r    # dist/vita/PocketFigma.vpk — native 960x544 Vita build
