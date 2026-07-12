@@ -6,17 +6,12 @@
   "title": "Pocket Figma",
   "version": "0.1.0",
   "engine": {
-    "abi": 1,
     "capabilities": {
       "requires": [
-        { "id": "ui.drawlist", "version": 1 },
-        { "id": "text.glyphs.baked", "version": 1 },
-        { "id": "input.buttons", "version": 1 },
-        {
-          "id": "input.analog",
-          "version": 1,
-          "parameters": { "sticks": 1 }
-        }
+        "ui.drawlist",
+        "text.glyphs.baked",
+        "input.buttons",
+        "input.analog.left"
       ]
     }
   },
@@ -24,24 +19,9 @@
     "entry": "app/main.tsx",
     "output": "main",
     "framework": "solid",
-    "simulationHz": 60,
     "viewport": {
       "logical": [480, 272],
       "presentation": "integer-fit"
-    }
-  },
-  "packages": {
-    "psp": {
-      "title": "Pocket Figma",
-      "icon0": "art/ICON0.png",
-      "pic1": "art/PIC1.png",
-      "memoryBudgetMb": 20
-    },
-    "vita": {
-      "title": "Pocket Figma",
-      "titleId": "PFIG00001",
-      "icon0": "art/vita/ICON0.png",
-      "memoryBudgetMb": 64
     }
   }
 }

@@ -23,10 +23,9 @@ fn mark(stage: &str) {
 fn fail(message: &str) -> ! {
     vita_log(format_args!("[Pocket Figma Vita] {message}"));
     #[cfg(feature = "capture")]
-    unsafe {
+    {
         let _ = std::fs::create_dir_all(CAPTURE_DIR);
         let _ = std::fs::write(format!("{CAPTURE_DIR}/error.txt"), message);
-        vitasdk_sys::sceKernelExitProcess(1);
     }
     loop {
         std::thread::yield_now();
@@ -85,7 +84,12 @@ fn main() {
             if plan.complete(frame) {
                 let _ = std::fs::create_dir_all(CAPTURE_DIR);
                 let _ = std::fs::write(format!("{CAPTURE_DIR}/done"), b"ok\n");
-                vitasdk_sys::sceKernelExitProcess(0);
+                // Vita3K can fault in GXM teardown when the guest exits itself.
+                // The host harness owns termination after observing `done`, so
+                // park the guest with all graphics state intact.
+                loop {
+                    std::thread::yield_now();
+                }
             }
         }
     }

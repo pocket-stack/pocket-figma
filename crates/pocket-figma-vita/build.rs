@@ -1,4 +1,4 @@
-//! Embed the ResolvedBuildPlan output's JS + pak in the Vita executable.
+//! Embed the resolved PocketJS app output's JS + pak in the Vita executable.
 //!
 //! The TypeScript driver always rebuilds them first. Keeping the embed step
 //! here means the installed VPK is self-contained and the device performs no
@@ -15,7 +15,7 @@ fn main() {
         .unwrap_or_else(|| crate_dir.join("../../dist"));
     let out = PathBuf::from(env::var("OUT_DIR").unwrap());
     let app = env::var("POCKETJS_APP_OUTPUT")
-        .expect("POCKETJS_APP_OUTPUT must come from ResolvedBuildPlan");
+        .expect("POCKETJS_APP_OUTPUT must come from PocketJS HostBuildInputs");
 
     let js_src = dist.join(format!("{app}.js"));
     println!("cargo:rerun-if-changed={}", js_src.display());
@@ -44,7 +44,6 @@ fn main() {
         "POCKETJS_OUTPUT_DIR",
         "POCKETJS_TARGET",
         "POCKETJS_HOST_ABI",
-        "POCKETJS_CONTRACT_HASH",
         "POCKETJS_LOGICAL_WIDTH",
         "POCKETJS_LOGICAL_HEIGHT",
         "POCKETJS_PHYSICAL_WIDTH",

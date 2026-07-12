@@ -2,9 +2,8 @@
 //! JS_Eval, which requires input[len] == '\0'; main.rs evals len - 1) and
 //! dist/main.pak (styles.bin + font atlases + the baked TILESET pyramids).
 //! Same include_str!/include_bytes! pattern as vendor/pocketjs/native/
-//! build.rs. POCKETJS_APP_OUTPUT comes from the same ResolvedBuildPlan used
-//! by the compiler. Missing outputs fail the build with the fix
-//! (scripts/psp.ts always compiles the plan first).
+//! build.rs. POCKETJS_APP_OUTPUT comes from PocketJS HostBuildInputs.
+//! Missing outputs fail the build; scripts/psp.ts always compiles first.
 
 use std::env;
 use std::fs;
@@ -17,7 +16,7 @@ fn main() {
         .map(PathBuf::from)
         .unwrap_or_else(|| crate_dir.join("../../dist"));
     let app = env::var("POCKETJS_APP_OUTPUT")
-        .expect("POCKETJS_APP_OUTPUT must come from ResolvedBuildPlan");
+        .expect("POCKETJS_APP_OUTPUT must come from PocketJS HostBuildInputs");
 
     let js_src = dist.join(format!("{app}.js"));
     println!("cargo:rerun-if-changed={}", js_src.display());
@@ -46,7 +45,6 @@ fn main() {
         "POCKETJS_OUTPUT_DIR",
         "POCKETJS_TARGET",
         "POCKETJS_HOST_ABI",
-        "POCKETJS_CONTRACT_HASH",
         "POCKETJS_LOGICAL_WIDTH",
         "POCKETJS_LOGICAL_HEIGHT",
         "POCKETJS_PHYSICAL_WIDTH",

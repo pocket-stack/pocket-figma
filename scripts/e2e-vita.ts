@@ -13,6 +13,7 @@
 //   VITA3K                path to the Vita3K executable
 //   VITA3K_PREF           isolated VitaFS root (defaults below out/)
 //   VITA3K_CONFIG_SOURCE  source config.yml to clone without modifying it
+//   VITA_E2E_CASE          run one named journey while diagnosing a failure
 
 
 import {
@@ -72,6 +73,16 @@ const SPECS: Spec[] = [
     captureFrame: 71,
   },
 ];
+const requestedCase = process.env.VITA_E2E_CASE;
+const specs = requestedCase
+  ? SPECS.filter((spec) => spec.name === requestedCase)
+  : SPECS;
+if (specs.length === 0) {
+  console.error(
+    `Unknown VITA_E2E_CASE=${requestedCase}; expected ${SPECS.map((spec) => spec.name).join(", ")}`,
+  );
+  process.exit(1);
+}
 
 const vita3kCandidates = [
   process.env.VITA3K,
@@ -264,7 +275,12 @@ async function launchAndWait(): Promise<string> {
     const stdout = new Response(child.stdout).text();
     const stderr = new Response(child.stderr).text();
     const deadline = Date.now() + 180_000;
-    while (Date.now() < deadline && !existsSync(doneFile)) {
+    const errorFile = `${captureDir}/error.txt`;
+    while (
+      Date.now() < deadline &&
+      !existsSync(doneFile) &&
+      !existsSync(errorFile)
+    ) {
       const exited = await Promise.race([
         child.exited.then(() => true),
         Bun.sleep(100).then(() => false),
@@ -283,8 +299,9 @@ async function launchAndWait(): Promise<string> {
       const stage = existsSync(`${captureDir}/stage.txt`)
         ? readFileSync(`${captureDir}/stage.txt`, "utf8")
         : "not-started";
-      const error = existsSync(`${captureDir}/error.txt`)
-        ? readFileSync(`${captureDir}/error.txt`, "utf8")
+      const hasAppError = existsSync(errorFile);
+      const error = hasAppError
+        ? readFileSync(errorFile, "utf8")
         : "none";
       throw new Vita3kLaunchError(
         `Vita3K completion=${completed}, captures=${files.length}/1, stage=${stage}, error=${error} under ${captureDir}\n${logs}`,
@@ -345,7 +362,7 @@ await prepareVita3k();
 
 let failures = 0;
 const captures = new Map<string, Uint8Array>();
-for (const spec of SPECS) {
+for (const spec of specs) {
   console.log(`\n## ${spec.name} (capture frame ${spec.captureFrame})`);
   const build = Bun.spawnSync(
     ["bun", "scripts/vita.ts", "--release", "--capture"],
