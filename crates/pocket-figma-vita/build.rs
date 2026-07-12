@@ -10,7 +10,9 @@ use std::path::PathBuf;
 
 fn main() {
     let crate_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
-    let dist = crate_dir.join("../../dist");
+    let dist = env::var_os("POCKETJS_OUTPUT_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| crate_dir.join("../../dist"));
     let out = PathBuf::from(env::var("OUT_DIR").unwrap());
     let app = env::var("POCKETJS_APP_OUTPUT")
         .expect("POCKETJS_APP_OUTPUT must come from ResolvedBuildPlan");
@@ -39,6 +41,7 @@ fn main() {
     for name in [
         "POCKETJS_APP_OUTPUT",
         "POCKETJS_EMBED_APP",
+        "POCKETJS_OUTPUT_DIR",
         "POCKETJS_TARGET",
         "POCKETJS_HOST_ABI",
         "POCKETJS_CONTRACT_HASH",
