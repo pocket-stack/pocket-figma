@@ -59,6 +59,7 @@ dependencies = [
 name = "pocket-figma-vita"
 version = "0.1.0"
 dependencies = [
+ "libquickjs-sys",
  "pocketjs-vita",
  "vitasdk-sys",
 ]

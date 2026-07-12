@@ -13,6 +13,7 @@ build = "build.rs"
 
 [dependencies]
 pocketjs-vita = { path = "../../vendor/pocketjs/native-vita" }
+libquickjs-sys = { git = "https://github.com/doodlewind/quickjs-rs.git", rev = "ae957fd7820ad22e564aa72976a9bf7f7a9a8cac", optional = true }
 vitasdk-sys = { version = "0.3.3", features = [
   "SceCtrl_stub",
   "SceProcessmgr_stub",
@@ -20,7 +21,7 @@ vitasdk-sys = { version = "0.3.3", features = [
 
 [features]
 # Compile deterministic scripted input + 960x544 framebuffer dumps for Vita3K.
-capture = ["pocketjs-vita/capture"]
+capture = ["pocketjs-vita/capture", "dep:libquickjs-sys"]
 # Rolling frame timing output for real-hardware validation.
 bench = ["pocketjs-vita/bench"]
 

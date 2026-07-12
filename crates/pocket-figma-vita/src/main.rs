@@ -49,13 +49,16 @@ fn main() {
         let mut frame = 0u64;
         loop {
             let pad = input::read();
+            let hardware_touches = input::read_touches();
             #[cfg(feature = "capture")]
-            let (buttons, analog) = plan.input(frame, pad.buttons as i32, pad.lx, pad.ly);
+            let (buttons, analog, touches) =
+                plan.input(frame, pad.buttons as i32, pad.lx, pad.ly, hardware_touches);
             #[cfg(not(feature = "capture"))]
-            let (buttons, analog) = (pad.buttons as i32, pad.left_analog());
+            let (buttons, analog, touches) =
+                (pad.buttons as i32, pad.left_analog(), hardware_touches);
 
             runtime
-                .frame_with_analog(buttons, analog)
+                .frame_with_input(buttons, analog, &touches)
                 .unwrap_or_else(|error| fail(&error));
             runtime.tick();
             #[cfg(feature = "capture")]
@@ -72,9 +75,16 @@ fn main() {
             #[cfg(feature = "capture")]
             if let Some(index) = plan.capture_index(frame) {
                 mark("capture");
+                let telemetry =
+                    capture::ViewTelemetry::read(&runtime).unwrap_or_else(|error| fail(&error));
                 runtime
                     .capture_golden(&capture::CapturePlan::path(index))
                     .unwrap_or_else(|error| fail(&error.to_string()));
+                std::fs::write(
+                    capture::CapturePlan::telemetry_path(index),
+                    telemetry.encode(),
+                )
+                .unwrap_or_else(|error| fail(&error.to_string()));
                 mark("captured");
             }
 

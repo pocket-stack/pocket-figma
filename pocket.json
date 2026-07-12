@@ -11,6 +11,9 @@
         "text.glyphs.baked",
         "input.buttons",
         "input.analog.left"
+      ],
+      "enhances": [
+        "input.touch"
       ]
     }
   },

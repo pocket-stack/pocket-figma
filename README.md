@@ -30,6 +30,8 @@ reference instance of the [Pocket app manifest](./docs/manifest.md).
 
 | input | action |
 |---|---|
+| Vita front touch: one finger | pan, with inertial release |
+| Vita front touch: two fingers | pan and pinch to zoom |
 | analog nub / left stick / d-pad | pan |
 | R / L trigger | zoom in / out |
 | △ / □ | next / previous page |
@@ -45,7 +47,7 @@ bun run build         # dist/main.js + dist/main.pak (bundle + baked tiles)
 bun run psp -- -r     # dist/EBOOT.PBP — copy to ms0:/PSP/GAME/PocketFigma/
 bun run vita -- -r    # dist/vita/PocketFigma.vpk — native 960x544 Vita build
 bun run desktop       # run windowed via the vendored uihost (wgpu)
-bun run golden        # byte-exact 960x544 controller/fullscreen goldens
+bun run golden        # byte-exact 960x544 controller/touch/fullscreen goldens
 bun run e2e:vita      # build the VPK and compare native Vita3K captures
 ```
 
@@ -54,8 +56,14 @@ The Vita target keeps PocketJS's 480×272 logical canvas while selecting the
 therefore stay identical to PSP, but Figma vectors, type and photos reach the
 native 960×544 display with twice the raster detail. Selection comes from
 `platform.pixelRatio`, not a Vita-specific branch. Physical buttons and the
-left stick map onto the same deterministic input contract as PSP; touch input
-is intentionally not enabled yet.
+left stick map onto the same deterministic input contract as PSP. On Vita,
+front-panel contacts arrive in the same logical coordinate space: one finger
+directly pans with inertial release, while two fingers pan and pinch around
+their centroid. PSP keeps the complete controller fallback because touch is
+declared as an optional `input.touch` enhancement rather than a requirement.
+The release VPK has the stable Vita Title ID `PFIG00001`, so it installs as
+Pocket Figma alongside PocketJS demos and OpenStrike instead of replacing
+them.
 
 Vita builds expect VitaSDK (via `$VITASDK`, falling back to `~/vitasdk`),
 `cargo-vita`, and the pinned Rust nightly in

@@ -46,11 +46,36 @@ interface Spec {
   name: string;
   /** `frame:mask:lx:ly` states, held until the next entry. */
   input: string;
+  /** `frame:id:x:y|id:x:y` states; an empty state releases all contacts. */
+  touch?: string;
   captureFrame: number;
+}
+
+interface ViewTelemetry {
+  zoom: number;
+  minZoom: number;
+  centerX: number;
+  centerY: number;
 }
 
 const R = 0x0200;
 const TRIANGLE = 0x1000;
+const touchPan = [
+  "0:",
+  ...Array.from(
+    { length: 7 },
+    (_, index) => `${44 + index}:1:${240 + index * 10}:136`,
+  ),
+  "51:",
+].join(",");
+const touchPinch = [
+  "0:",
+  ...Array.from({ length: 11 }, (_, index) => {
+    const spread = 40 + index * 4;
+    return `${20 + index}:1:${240 - spread}:136|2:${240 + spread}:136`;
+  }),
+  "31:",
+].join(",");
 const SPECS: Spec[] = [
   {
     name: "fit",
@@ -71,6 +96,24 @@ const SPECS: Spec[] = [
     name: "next-page",
     input: `0:0:128:128,16:${TRIANGLE}:128:128,17:0:128:128`,
     captureFrame: 71,
+  },
+  {
+    name: "touch-pan-drag",
+    input: `0:0:128:128,20:${R}:128:128,40:0:128:128`,
+    touch: touchPan,
+    captureFrame: 50,
+  },
+  {
+    name: "touch-pan-inertia",
+    input: `0:0:128:128,20:${R}:128:128,40:0:128:128`,
+    touch: touchPan,
+    captureFrame: 70,
+  },
+  {
+    name: "touch-pinch",
+    input: "0:0:128:128",
+    touch: touchPinch,
+    captureFrame: 45,
   },
 ];
 const requestedCase = process.env.VITA_E2E_CASE;
@@ -358,10 +401,50 @@ function hasNativeDetail(rgba: Uint8Array): boolean {
   return false;
 }
 
+function changedPixels(a: Uint8Array, b: Uint8Array): number {
+  let changed = 0;
+  for (let offset = 0; offset < a.length; offset += 4) {
+    if (
+      a[offset] !== b[offset] ||
+      a[offset + 1] !== b[offset + 1] ||
+      a[offset + 2] !== b[offset + 2] ||
+      a[offset + 3] !== b[offset + 3]
+    ) {
+      changed++;
+    }
+  }
+  return changed;
+}
+
+function readViewTelemetry(capture: string): ViewTelemetry {
+  const file = `${captureDir}/${capture.replace(/\.rgba$/, ".view")}`;
+  if (!existsSync(file)) {
+    throw new Error(`capture telemetry missing: ${file}`);
+  }
+  const values = new Map<string, number>();
+  for (const line of readFileSync(file, "utf8").trim().split("\n")) {
+    const [key, raw] = line.split("=", 2);
+    const value = Number(raw);
+    if (key && Number.isFinite(value)) values.set(key, value);
+  }
+  const value = (key: string): number => {
+    const result = values.get(key);
+    if (result === undefined) throw new Error(`telemetry field missing: ${key}`);
+    return result;
+  };
+  return {
+    zoom: value("zoom"),
+    minZoom: value("min_zoom"),
+    centerX: value("center_x"),
+    centerY: value("center_y"),
+  };
+}
+
 await prepareVita3k();
 
 let failures = 0;
 const captures = new Map<string, Uint8Array>();
+const views = new Map<string, ViewTelemetry>();
 for (const spec of specs) {
   console.log(`\n## ${spec.name} (capture frame ${spec.captureFrame})`);
   const build = Bun.spawnSync(
@@ -373,6 +456,7 @@ for (const spec of specs) {
       env: {
         ...process.env,
         POCKET_FIGMA_VITA_CAPTURE_INPUT: spec.input,
+        POCKET_FIGMA_VITA_CAPTURE_TOUCH: spec.touch ?? "",
         POCKET_FIGMA_VITA_CAP_START: String(spec.captureFrame),
         POCKET_FIGMA_VITA_CAP_N: "1",
       },
@@ -429,6 +513,17 @@ for (const spec of specs) {
     failures++;
     continue;
   }
+  try {
+    const view = readViewTelemetry(capture);
+    views.set(spec.name, view);
+    console.log(
+      `view ${spec.name}: zoom=${view.zoom.toFixed(5)}, center=(${view.centerX.toFixed(2)}, ${view.centerY.toFixed(2)})`,
+    );
+  } catch (error) {
+    console.error(`FAIL ${spec.name}: ${error}`);
+    failures++;
+    continue;
+  }
   captures.set(spec.name, raw.slice());
 
   const png = encodePNG(raw, width, height);
@@ -454,18 +549,69 @@ for (const spec of specs) {
   }
 }
 
-for (const [baselineName, name] of [
-  ["fit", "zoom"],
-  ["zoom", "zoom-pan"],
-  ["fit", "next-page"],
+const fitView = views.get("fit");
+const zoomView = views.get("zoom");
+const dragView = views.get("touch-pan-drag");
+const inertiaView = views.get("touch-pan-inertia");
+const pinchView = views.get("touch-pinch");
+
+if (fitView && pinchView) {
+  const factor = pinchView.zoom / fitView.zoom;
+  const anchored =
+    Math.abs(pinchView.centerX - fitView.centerX) < 0.01 &&
+    Math.abs(pinchView.centerY - fitView.centerY) < 0.01;
+  if (factor < 1.9 || factor > 2.1 || !anchored) {
+    console.error(
+      `FAIL touch-pinch: factor=${factor.toFixed(4)}, centered=${anchored}`,
+    );
+    failures++;
+  } else {
+    console.log(`ok touch-pinch telemetry: ${factor.toFixed(4)}x at fixed centroid`);
+  }
+}
+
+if (zoomView && dragView && inertiaView) {
+  const dragDelta = dragView.centerX - zoomView.centerX;
+  const glideDelta = inertiaView.centerX - dragView.centerX;
+  const sameDirection = dragDelta * glideDelta > 0;
+  if (
+    Math.abs(dragDelta) < 100 ||
+    Math.abs(glideDelta) < 20 ||
+    !sameDirection
+  ) {
+    console.error(
+      `FAIL touch-pan telemetry: drag=${dragDelta.toFixed(2)}, glide=${glideDelta.toFixed(2)}, sameDirection=${sameDirection}`,
+    );
+    failures++;
+  } else {
+    console.log(
+      `ok touch-pan telemetry: drag=${dragDelta.toFixed(2)}, post-release glide=${glideDelta.toFixed(2)}`,
+    );
+  }
+}
+
+for (const [baselineName, name, minimumChanged] of [
+  ["fit", "zoom", 1],
+  ["zoom", "zoom-pan", 1],
+  ["fit", "next-page", 1],
+  ["zoom", "touch-pan-drag", 1_000],
+  ["touch-pan-drag", "touch-pan-inertia", 1_000],
+  ["fit", "touch-pinch", 1_000],
 ] as const) {
   const baseline = captures.get(baselineName);
   const candidate = captures.get(name);
-  if (baseline && candidate && Buffer.from(baseline).equals(candidate)) {
-    console.error(
-      `FAIL ${name}: native controller journey did not change the ${baselineName} framebuffer`,
-    );
-    failures++;
+  if (baseline && candidate) {
+    const changed = changedPixels(baseline, candidate);
+    if (changed < minimumChanged) {
+      console.error(
+        `FAIL ${name}: changed ${changed} pixels from ${baselineName}, expected at least ${minimumChanged}`,
+      );
+      failures++;
+    } else {
+      console.log(
+        `ok ${name}: ${changed} pixels changed from ${baselineName}`,
+      );
+    }
   }
 }
 

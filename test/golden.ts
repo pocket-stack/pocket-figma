@@ -33,12 +33,38 @@ const ANALOG_CENTER = 0x8080;
 interface FrameInput {
   buttons?: number;
   analog?: number;
+  touches?: readonly number[];
 }
 
 interface GoldenSpec {
   name: string;
   frames: number;
   input?: (frame: number) => FrameInput;
+}
+
+function packTouch(id: number, x: number, y: number): number {
+  return ((id & 0xff) << 18) | ((y & 0x1ff) << 9) | (x & 0x1ff);
+}
+
+function zoomThenTouchPan(frame: number): FrameInput {
+  if (frame >= 20 && frame < 40) return { buttons: BTN.RTRIGGER };
+  if (frame >= 44 && frame <= 50) {
+    return { touches: [packTouch(1, 240 + (frame - 44) * 10, 136)] };
+  }
+  return {};
+}
+
+function pinch(frame: number): FrameInput {
+  if (frame >= 20 && frame <= 30) {
+    const spread = 40 + (frame - 20) * 4;
+    return {
+      touches: [
+        packTouch(1, 240 - spread, 136),
+        packTouch(2, 240 + spread, 136),
+      ],
+    };
+  }
+  return {};
 }
 
 const SPECS: GoldenSpec[] = [
@@ -68,6 +94,21 @@ const SPECS: GoldenSpec[] = [
     input(frame) {
       return frame === 16 ? { buttons: BTN.TRIANGLE } : {};
     },
+  },
+  {
+    name: "touch-pan-drag",
+    frames: 51,
+    input: zoomThenTouchPan,
+  },
+  {
+    name: "touch-pan-inertia",
+    frames: 71,
+    input: zoomThenTouchPan,
+  },
+  {
+    name: "touch-pinch",
+    frames: 46,
+    input: pinch,
   },
 ];
 
@@ -143,13 +184,21 @@ async function render(
   try {
     (0, eval)(js);
     const frame = globals.frame as
-      ((buttons: number, analog?: number) => void) | undefined;
+      ((
+        buttons: number,
+        analog?: number,
+        touches?: readonly number[],
+      ) => void) | undefined;
     if (typeof frame !== "function") {
       throw new Error("bundle did not install globalThis.frame");
     }
     for (let index = 0; index < spec.frames; index++) {
       const input = spec.input?.(index) ?? {};
-      frame(input.buttons ?? 0, input.analog ?? ANALOG_CENTER);
+      frame(
+        input.buttons ?? 0,
+        input.analog ?? ANALOG_CENTER,
+        input.touches,
+      );
       wasm.tick();
     }
     return wasm.renderScaled(VITA_SCALE).slice();
@@ -207,18 +256,21 @@ for (const spec of SPECS) {
   }
 }
 
-// These journeys exercise different controller paths; identical results
-// would mean that the Vita input contract no longer reaches DeepZoom/app UI.
+// These journeys exercise independent controller and touch paths; identical
+// results would mean that an input contract no longer reaches DeepZoom.
 for (const [baselineName, name] of [
   ["fit", "zoom"],
   ["zoom", "zoom-pan"],
   ["fit", "next-page"],
+  ["zoom", "touch-pan-drag"],
+  ["touch-pan-drag", "touch-pan-inertia"],
+  ["fit", "touch-pinch"],
 ] as const) {
   const baseline = frames.get(baselineName);
   const candidate = frames.get(name);
   if (baseline && candidate && Buffer.from(baseline).equals(candidate)) {
     console.error(
-      `FAIL  ${name}: controller journey did not change the ${baselineName} framebuffer`,
+      `FAIL  ${name}: input journey did not change the ${baselineName} framebuffer`,
     );
     failed++;
   }
