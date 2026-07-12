@@ -9,7 +9,7 @@ Pocket Figma intentionally declares a PSP-shaped baseline rather than separate
 PSP and Vita applications:
 
 - a 480×272 logical canvas with `integer-fit` presentation;
-- DrawList UI and baked glyphs;
+- baked glyph text;
 - physical buttons and one analog stick;
 
 The PSP profile satisfies that contract at 1×. The Vita profile satisfies the
@@ -22,17 +22,18 @@ Capabilities are plain framework API identifiers. A target advertises only
 APIs its stock host has implemented and tested; the manifest's `requires`
 entries must all be present or resolution fails.
 
-The four requirements in this app are:
+The three requirements in this app are:
 
 | capability |
 |---|
-| `ui.drawlist` |
 | `text.glyphs.baked` |
 | `input.buttons` |
 | `input.analog.left` |
 
-DeepZoom is implemented over the declared DrawList/baked-asset host surface;
-it is not a separate platform capability.
+DrawList is PocketJS's internal core-to-backend rendering IR, not an API this
+application can observe or request, so it is intentionally not a capability.
+DeepZoom is implemented over the public host surface; it is not a separate
+platform capability.
 
 ## Viewport and build boundary
 
