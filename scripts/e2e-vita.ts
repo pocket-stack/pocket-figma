@@ -343,19 +343,19 @@ function distinctPixels(rgba: Uint8Array): number {
   return seen.size;
 }
 
-function assertExactFullscreen2x(rgba: Uint8Array): void {
+/** Prove capture did not regress to rendering 480x272 and duplicating each pixel. */
+function hasNativeDetail(rgba: Uint8Array): boolean {
   for (let y = 0; y < height; y += 2) {
     for (let x = 0; x < width; x += 2) {
       const topLeft = (y * width + x) * 4;
       for (const offset of [topLeft + 4, topLeft + width * 4, topLeft + width * 4 + 4]) {
         for (let channel = 0; channel < 4; channel++) {
-          if (rgba[topLeft + channel] !== rgba[offset + channel]) {
-            throw new Error(`pixel block at (${x}, ${y}) is not exact 2x`);
-          }
+          if (rgba[topLeft + channel] !== rgba[offset + channel]) return true;
         }
       }
     }
   }
+  return false;
 }
 
 await prepareVita3k();
@@ -422,10 +422,10 @@ for (const spec of specs) {
     failures++;
     continue;
   }
-  try {
-    assertExactFullscreen2x(raw);
-  } catch (error) {
-    console.error(`FAIL ${spec.name}: framebuffer is not 960x544 exact 2x: ${error}`);
+  if (!hasNativeDetail(raw)) {
+    console.error(
+      `FAIL ${spec.name}: framebuffer contains only duplicated 2x2 logical pixels`,
+    );
     failures++;
     continue;
   }
@@ -444,7 +444,7 @@ for (const spec of specs) {
     );
     failures++;
   } else if (readFileSync(golden).equals(png)) {
-    console.log(`ok ${spec.name} (960x544 exact 2x, byte-exact)`);
+    console.log(`ok ${spec.name} (960x544 native detail, byte-exact)`);
   } else {
     await Bun.write(`${goldenDir}/${spec.name}.actual.png`, png);
     console.error(

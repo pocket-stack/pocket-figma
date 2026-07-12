@@ -39,6 +39,7 @@ reference instance of the [Pocket app manifest](./docs/manifest.md).
 
 ```sh
 bun run setup         # submodules + vendored deps
+bun run bake          # regenerate committed 1x + 2x tile pyramids from the .fig
 bun run check:platforms  # validate the PSP baseline against PSP and Vita
 bun run build         # dist/main.js + dist/main.pak (bundle + baked tiles)
 bun run psp -- -r     # dist/EBOOT.PBP — copy to ms0:/PSP/GAME/PocketFigma/
@@ -48,10 +49,13 @@ bun run golden        # byte-exact 960x544 controller/fullscreen goldens
 bun run e2e:vita      # build the VPK and compare native Vita3K captures
 ```
 
-The Vita target keeps PocketJS's 480×272 logical canvas and presents it as
-an exact 2× image filling the native 960×544 display. It maps the physical
-buttons and left stick onto the same deterministic input contract as PSP;
-touch input is intentionally not enabled yet.
+The Vita target keeps PocketJS's 480×272 logical canvas while selecting the
+512-pixel (`@2x`) version of each 256-logical-pixel tile. Layout, pan and zoom
+therefore stay identical to PSP, but Figma vectors, type and photos reach the
+native 960×544 display with twice the raster detail. Selection comes from
+`platform.pixelRatio`, not a Vita-specific branch. Physical buttons and the
+left stick map onto the same deterministic input contract as PSP; touch input
+is intentionally not enabled yet.
 
 Vita builds expect VitaSDK (via `$VITASDK`, falling back to `~/vitasdk`),
 `cargo-vita`, and the pinned Rust nightly in
@@ -60,12 +64,14 @@ expects Vita3K to have been launched once so it can clone a local
 `config.yml`; it uses its own VitaFS below `out/` and never rewrites the
 emulator's normal configuration.
 
-The baked tiles are committed (5.9 MB, four pages); `bun run bake` regenerates
-them from a local copy of the .fig (`--fig=<path>`, defaults to
-`~/Downloads/Paper Wireframe Kit (Community).fig`). `bun run cover` regenerates
-the XMB and LiveArea art (ImageMagick is used for Vita's palette-PNG format):
-the icon is the Figma logo mark, drawn by the script itself; the backdrop is
-the kit's own cover, rendered from the .fig.
+The baked tiles are committed: 5.9 MB at 1x and 15.7 MB at 2x across four
+pages. `bun run bake` regenerates both sets serially from a local copy of the
+.fig (`--fig=<path>`, defaults to
+`~/Downloads/Paper Wireframe Kit (Community).fig`). The density-2 bake writes
+`@2x.bin` siblings and `tiles@2x.ts` without replacing the base `pak.json`.
+`bun run cover` regenerates the XMB and LiveArea art (ImageMagick is used for
+Vita's palette-PNG format): the icon is the Figma logo mark, drawn by the
+script itself; the backdrop is the kit's own cover, rendered from the .fig.
 
 <img src="docs/figma-psp-xmb.png" alt="The PSP's XMB game menu on real hardware: the Pocket Figma icon selected over the wave background, with OpenStrike below" width="100%" />
 

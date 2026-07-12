@@ -13,8 +13,11 @@ PSP and Vita applications:
 - physical buttons and one analog stick;
 
 The PSP profile satisfies that contract at 1×. The Vita profile satisfies the
-same contract at an exact 2× fullscreen scale on 960×544. Touch is absent from
-both `requires` and `enhances`, so this version neither needs nor claims it.
+same contract on its 960×544 fullscreen output and resolves a raster density of
+2. The viewer selects its matching checked-in tile manifest through
+`platform.pixelRatio`; target names never enter application code. Touch is
+absent from both `requires` and `enhances`, so this version neither needs nor
+claims it.
 
 ## Capabilities
 

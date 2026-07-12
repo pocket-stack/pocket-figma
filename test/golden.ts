@@ -1,19 +1,21 @@
 // Deterministic Pocket Figma application golden.
 //
-// The app keeps PocketJS's 480x272 logical coordinate space on every target.
-// PS Vita presents that framebuffer as an exact 2x fullscreen image at
-// 960x544, so the committed goldens are encoded at the physical Vita size.
-// This harness boots the real app bundle + pak against PocketJS's wasm core,
-// drives the same button-mask/analog frame contract as the native hosts, and
-// byte-compares the resulting 2x framebuffer.
+// The app keeps PocketJS's 480x272 logical coordinate space on every target,
+// while PS Vita rasterizes that scene directly at 960x544 with density-2
+// fonts, rounded masks and Figma tiles. This harness compiles the real Vita
+// bundle + pak, boots them against PocketJS's wasm core at raster density 2,
+// drives the same button-mask/analog frame contract as the native host, and
+// byte-compares the resulting physical framebuffer.
 //
 //   bun run golden          # compare committed goldens
 //   bun run golden:update   # regenerate, then inspect every PNG
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createWasmUi } from "../vendor/pocketjs/host-web/wasm-ops.js";
+import { unpack } from "../vendor/pocketjs/compiler/pak.ts";
 import { BTN, SCREEN_H, SCREEN_W } from "../vendor/pocketjs/spec/spec.ts";
 import { encodePNG } from "../vendor/pocketjs/test/png.ts";
+import { compilePocketTarget } from "../scripts/pocket-plan.ts";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 const DIST = `${ROOT}dist/`;
@@ -80,32 +82,11 @@ function run(command: string[]): void {
   }
 }
 
-function ensureArtifacts(): void {
+async function ensureArtifacts(): Promise<void> {
   // Always rebuild the application: silently testing a stale bundle is worse
   // than the few seconds this deterministic build costs.
-  run(["bun", "run", "build"]);
+  await compilePocketTarget("vita");
   run(["bun", "vendor/pocketjs/scripts/wasm.ts"]);
-}
-
-function scaleFullscreen2x(logical: Uint8Array): Uint8Array {
-  if (logical.byteLength !== LOGICAL_W * LOGICAL_H * 4) {
-    throw new Error(
-      `expected ${LOGICAL_W}x${LOGICAL_H} RGBA framebuffer, got ${logical.byteLength} bytes`,
-    );
-  }
-  const physical = new Uint8Array(VITA_W * VITA_H * 4);
-  for (let y = 0; y < LOGICAL_H; y++) {
-    for (let x = 0; x < LOGICAL_W; x++) {
-      const src = (y * LOGICAL_W + x) * 4;
-      for (let dy = 0; dy < VITA_SCALE; dy++) {
-        const row = ((y * VITA_SCALE + dy) * VITA_W + x * VITA_SCALE) * 4;
-        for (let dx = 0; dx < VITA_SCALE; dx++) {
-          physical.set(logical.subarray(src, src + 4), row + dx * 4);
-        }
-      }
-    }
-  }
-  return physical;
 }
 
 function distinctPixels(rgba: Uint8Array): number {
@@ -122,6 +103,30 @@ function distinctPixels(rgba: Uint8Array): number {
   return seen.size;
 }
 
+function assertDensity2Tiles(pak: ArrayBuffer): void {
+  const tiles = unpack(new Uint8Array(pak)).filter((entry) =>
+    entry.key.startsWith("ui:tile.fig."),
+  );
+  if (tiles.length !== 20) {
+    throw new Error(`expected 20 Figma tile pyramids, got ${tiles.length}`);
+  }
+  for (const tile of tiles) {
+    const header = new DataView(
+      tile.data.buffer,
+      tile.data.byteOffset,
+      tile.data.byteLength,
+    );
+    const width = header.getUint16(8, true);
+    const height = header.getUint16(10, true);
+    if (width !== 512 || height !== 512) {
+      throw new Error(
+        `${tile.key} selected ${width}x${height} tiles; expected density-2 512x512`,
+      );
+    }
+  }
+  console.log("PASS  assets (20/20 density-2 tile pyramids selected)");
+}
+
 async function render(
   spec: GoldenSpec,
   wasmBytes: ArrayBuffer,
@@ -129,6 +134,7 @@ async function render(
   pak: ArrayBuffer,
 ) {
   const wasm = await createWasmUi(wasmBytes);
+  wasm.init(VITA_SCALE);
   const globals = globalThis as Record<string, unknown>;
   globals.ui = wasm.ops;
   globals.__pak = pak;
@@ -146,7 +152,7 @@ async function render(
       frame(input.buttons ?? 0, input.analog ?? ANALOG_CENTER);
       wasm.tick();
     }
-    return scaleFullscreen2x(wasm.render().slice());
+    return wasm.renderScaled(VITA_SCALE).slice();
   } finally {
     delete globals.ui;
     delete globals.__pak;
@@ -154,12 +160,13 @@ async function render(
   }
 }
 
-ensureArtifacts();
+await ensureArtifacts();
 mkdirSync(GOLDENS, { recursive: true });
 
 const wasmBytes = await Bun.file(WASM).arrayBuffer();
 const js = await Bun.file(`${DIST}main.js`).text();
 const pak = await Bun.file(`${DIST}main.pak`).arrayBuffer();
+assertDensity2Tiles(pak);
 
 let passed = 0;
 let failed = 0;

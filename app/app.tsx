@@ -21,7 +21,17 @@ import {
 import { BTN } from "@pocketjs/framework/input";
 import { onButtonPress } from "@pocketjs/framework/lifecycle";
 import * as hot from "@pocketjs/framework/hot";
-import { PAGES, TILE } from "./tiles.ts";
+import { platform } from "@pocketjs/framework/platform";
+import * as density1 from "./tiles.ts";
+import * as density2 from "./tiles@2x.ts";
+
+const TILE_ASSETS = {
+  [density1.RASTER_DENSITY]: density1,
+  [density2.RASTER_DENSITY]: density2,
+} as const;
+
+const tileAssets = TILE_ASSETS[platform.pixelRatio >= 2 ? 2 : 1];
+const { PAGES, TILE } = tileAssets;
 
 /** Baked manifest -> the DeepZoom engine's document shape. */
 const DOCS: TileDoc[] = PAGES.map((p) => ({

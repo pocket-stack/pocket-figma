@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "setup": "git submodule update --init && cd vendor/pocketjs && bun install && cd ../.. && mkdir -p node_modules && ln -sfn ../vendor/pocketjs/node_modules/solid-js node_modules/solid-js && ln -sfn ../vendor/pocketjs/node_modules/kiwi-schema node_modules/kiwi-schema && ln -sfn ../vendor/pocketjs/node_modules/@napi-rs node_modules/@napi-rs && ln -sfn ../vendor/pocketjs/node_modules/bun-types node_modules/bun-types && ln -sfn ../vendor/pocketjs/node_modules/typescript node_modules/typescript",
-    "bake": "bun tools/gen-assets.ts",
+    "bake": "bun tools/gen-assets.ts --density=1 && bun tools/gen-assets.ts --density=2",
     "build": "bun vendor/pocketjs/scripts/build.ts app/main.tsx --outdir=dist",
     "check:platforms": "bun vendor/pocketjs/scripts/pocket.ts check --target psp && bun vendor/pocketjs/scripts/pocket.ts check --target vita",
     "psp": "bun scripts/psp.ts",
