@@ -73,7 +73,9 @@ their centroid. PSP keeps the complete controller fallback because touch is
 declared as an optional `input.touch` enhancement rather than a requirement.
 The release VPK has the stable Vita Title ID `PFIG00001`, so it installs as
 Pocket Figma alongside PocketJS demos and OpenStrike instead of replacing
-them.
+them. Its final package goes through PocketJS's shared Vita asset resolver:
+Pocket Figma's icon, 840×500 background, 280×158 startup image, and template
+overlay the framework defaults as one validated LiveArea contract.
 
 Vita builds expect VitaSDK (via `$VITASDK`, falling back to `~/vitasdk`),
 `cargo-vita`, and the pinned Rust nightly in
