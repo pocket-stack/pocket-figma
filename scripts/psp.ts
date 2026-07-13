@@ -3,23 +3,22 @@
 //   bun scripts/psp.ts        # debug profile (opt-level 3 override below)
 //   bun scripts/psp.ts -r     # release
 //
-// The cross env is the exact block from vendor/pocketjs/scripts/psp.ts (the
-// dreamcart contract): Homebrew LLVM first on PATH, TARGET_CFLAGS for the
+// The cross env matches vendor/pocketjs/scripts/psp.ts: Homebrew LLVM first
+// on PATH, TARGET_CFLAGS for the
 // MIPS clang C builds, llvm-ar/ranlib for MIPS archives (Apple ar drops
 // them), RUST_PSP_TARGET at the vendored target json, RUST_PSP_ABORT_ONLY=1.
-// The PSP SDK comes from PSP_SDK or the dreamcart sibling checkout; PSPDEV
-// is exported for libquickjs-sys's own include resolution (its default
-// fallback path assumes the pocketjs sibling layout, not vendor/).
+// The PSP SDK resolver checks explicit PSP_SDK and PSPDEV values before
+// Pocket's shared, versioned toolchain cache.
 
 import { $ } from "bun";
 import { existsSync } from "node:fs";
+import { resolvePspBuildToolchain } from "../vendor/pocketjs/scripts/psp-toolchain.ts";
 import {
   compilePocketTarget,
   nativePlanEnvironment,
 } from "./pocket-plan.ts";
 
 const repo = new URL("..", import.meta.url).pathname;
-const home = process.env.HOME ?? "";
 const crateDir = `${repo}crates/pocket-figma-psp/`;
 
 const argv = Bun.argv.slice(2);
@@ -30,28 +29,18 @@ console.log("pocket-figma psp: resolving, checking, and compiling pocket.json");
 const plan = await compilePocketTarget("psp");
 
 // ---- 2. cargo psp ----------------------------------------------------------
-const sdkCandidates = [
-  process.env.PSP_SDK,
-  `${home}/code/dreamcart/mipsel-sony-psp`,
-].filter((p): p is string => !!p);
-const sdk = sdkCandidates.find((p) => existsSync(`${p}/psp/lib/libc.a`));
-if (!sdk) {
-  console.error(`pocket-figma psp: PSP SDK not found (looked in ${sdkCandidates.join(", ")}) — set PSP_SDK`);
+let toolchain: ReturnType<typeof resolvePspBuildToolchain>;
+try {
+  toolchain = resolvePspBuildToolchain();
+} catch (error) {
+  console.error(`pocket-figma psp: ${error instanceof Error ? error.message : String(error)}`);
   process.exit(1);
 }
-const llvm = existsSync("/opt/homebrew/opt/llvm/bin")
-  ? "/opt/homebrew/opt/llvm/bin"
-  : "/usr/local/opt/llvm/bin";
-if (!existsSync(`${llvm}/clang`)) {
-  console.error(`pocket-figma psp: Homebrew LLVM missing at ${llvm} (brew install llvm)`);
-  process.exit(1);
-}
-const TOOLCHAIN = "nightly-2026-05-28";
-const rustup = Bun.which("rustup") ?? `${home}/.cargo/bin/rustup`;
+const sdk = toolchain.sdk.path;
+const llvm = toolchain.llvmBin;
 
 const env = {
-  ...process.env,
-  PATH: `${llvm}:${home}/.cargo/bin:${process.env.PATH}`,
+  ...toolchain.environment,
   // Benign +abicalls(newlib) vs +noabicalls(rust-psp) linker warnings stay
   // suppressed, matching vendor/pocketjs/scripts/psp.ts.
   RUSTFLAGS: "-A linker-messages -A unexpected-cfgs -A unstable-name-collisions",
@@ -66,7 +55,6 @@ const env = {
   // CRITICAL: archive MIPS objects with llvm-ar (Apple ar drops them -> undefined JS_*).
   AR_mipsel_sony_psp: `${llvm}/llvm-ar`,
   RANLIB_mipsel_sony_psp: `${llvm}/llvm-ranlib`,
-  PSPDEV: sdk,
   RUST_PSP_TARGET: `${repo}vendor/pocketjs/native/targets/mipsel-sony-psp.json`,
   // panic-abort EBOOTs: no panic_unwind/libunwind in build-std.
   RUST_PSP_ABORT_ONLY: "1",
@@ -79,7 +67,7 @@ const env = {
 
 const cargoArgs: string[] = release ? ["--release"] : [];
 console.log("pocket-figma psp: cargo psp");
-await $`${rustup} run ${TOOLCHAIN} cargo psp ${cargoArgs}`.cwd(crateDir).env(env);
+await $`${toolchain.rustup} run ${toolchain.manifest.rust.toolchain} cargo psp ${cargoArgs}`.cwd(crateDir).env(env);
 
 // ---- 3. dist/EBOOT.PBP -----------------------------------------------------
 // A lone crate gets a plain EBOOT.PBP; keep the bin-named fallback in case

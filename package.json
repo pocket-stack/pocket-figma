@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "bootstrap": "bun vendor/pocketjs/scripts/bootstrap.ts",
     "setup": "git submodule update --init && cd vendor/pocketjs && bun install && cd ../.. && mkdir -p node_modules && ln -sfn ../vendor/pocketjs/node_modules/solid-js node_modules/solid-js && ln -sfn ../vendor/pocketjs/node_modules/kiwi-schema node_modules/kiwi-schema && ln -sfn ../vendor/pocketjs/node_modules/@napi-rs node_modules/@napi-rs && ln -sfn ../vendor/pocketjs/node_modules/bun-types node_modules/bun-types && ln -sfn ../vendor/pocketjs/node_modules/typescript node_modules/typescript",
     "bake": "bun tools/gen-assets.ts --density=1 && bun tools/gen-assets.ts --density=2",
     "build": "bun vendor/pocketjs/scripts/build.ts app/main.tsx --outdir=dist",
@@ -13,6 +14,7 @@
     "golden": "bun test/golden.ts",
     "golden:update": "UPDATE=1 bun test/golden.ts",
     "e2e:vita": "bun scripts/e2e-vita.ts",
+    "test:psp-toolchain": "bun test test/psp-toolchain.test.ts",
     "cover": "bun tools/gen-cover.ts"
   }
 }
