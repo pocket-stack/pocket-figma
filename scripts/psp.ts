@@ -13,6 +13,10 @@
 
 import { $ } from "bun";
 import { existsSync } from "node:fs";
+import {
+  compilePocketTarget,
+  nativePlanEnvironment,
+} from "./pocket-plan.ts";
 
 const repo = new URL("..", import.meta.url).pathname;
 const home = process.env.HOME ?? "";
@@ -22,8 +26,8 @@ const argv = Bun.argv.slice(2);
 const release = argv.includes("-r") || argv.includes("--release");
 
 // ---- 1. app bundle + pak -> dist/main.js + dist/main.pak ------------------
-console.log("pocket-figma psp: building the JS bundle");
-await $`bun vendor/pocketjs/scripts/build.ts app/main.tsx --outdir=dist`.cwd(repo);
+console.log("pocket-figma psp: resolving, checking, and compiling pocket.json");
+const plan = await compilePocketTarget("psp");
 
 // ---- 2. cargo psp ----------------------------------------------------------
 const sdkCandidates = [
@@ -68,6 +72,9 @@ const env = {
   RUST_PSP_ABORT_ONLY: "1",
   // Keep PSP dev builds fast (opt-level 0 is unusably slow on hardware).
   CARGO_PROFILE_DEV_OPT_LEVEL: process.env.CARGO_PROFILE_DEV_OPT_LEVEL ?? "3",
+  // The app crate and pocketjs-psp dependency consume the exact contract
+  // already embedded in the JS bundle.
+  ...nativePlanEnvironment(plan),
 };
 
 const cargoArgs: string[] = release ? ["--release"] : [];

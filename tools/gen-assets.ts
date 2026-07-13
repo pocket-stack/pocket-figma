@@ -1,12 +1,14 @@
 // tools/gen-assets.ts — bake a Figma file into deep-zoom tile pyramids.
 //
-//   bun tools/gen-assets.ts [--fig=<path to .fig>]
+//   bun tools/gen-assets.ts [--fig=<path to .fig>] [--density=1|2]
 //
 // Offline baker (run MANUALLY, like demos/gallery/gen-assets.ts): opens the
 // Paper Wireframe Kit .fig via compiler/fig.ts, rasterizes every real page at
-// a ladder of halving scales, quantizes to one 256-color palette per page, and
-// writes TILESET pak entries (spec/spec.ts 'PKTS') the viewer app streams one
-// tile at a time through the loadTileTexture op.
+// a ladder of halving LOGICAL scales, quantizes to one 256-color palette per
+// page, and writes TILESET pak entries (spec/spec.ts 'PKTS') the viewer app
+// streams one tile at a time through the loadTileTexture op. Density 2 keeps
+// the same 256-logical-pixel grid while rasterizing each tile at 512x512 and
+// each level at twice its logical scale.
 //
 // Outputs are COMMITTED (builds must work without the .fig, which lives in
 // ~/Downloads and never on CI):
@@ -17,14 +19,17 @@
 //                                          reads INSTEAD of parsing binary at
 //                                          runtime (plain .ts, not *.generated.ts,
 //                                          so the pass-1 scanner walks it)
+//   app/tiles/<page>.<level>@2x.bin density-2 siblings selected by the build
+//   app/tiles@2x.ts                 matching logical manifest for density 2
 //
-// Size discipline: the whole committed payload must stay <= ~6 MB. Three
-// things keep it there — (1) per-page max-zoom caps (MAX_SCALE below; the size
-// report this script prints is how you tune them), (2) solid tiles cost 8
-// directory bytes (paper wireframes are mostly whitespace), and (3) CLUT8 +
-// PackBits RLE on the inked tiles (flat fills RLE beautifully — which is also
-// why we do NOT dither: dithering shreds RLE runs for invisible quality gain
-// on near-grayscale wireframes).
+// Size discipline: density 1 must stay <= ~6 MB and density 2 <= ~24 MB (the
+// pixel budget grows quadratically). Three things keep them there — (1)
+// per-page max-zoom caps (MAX_SCALE below; the size report this script prints
+// is how you tune them), (2) solid tiles cost 8 directory bytes (paper
+// wireframes are mostly whitespace), and (3) CLUT8 + PackBits RLE on the inked
+// tiles (flat fills RLE beautifully — which is also why we do NOT dither:
+// dithering shreds RLE runs for invisible quality gain on near-grayscale
+// wireframes).
 //
 // Determinism: page order is document order, keys are sorted, and nothing
 // here emits timestamps — a re-run over the same .fig is byte-identical.
@@ -43,10 +48,10 @@ import {
 } from "../vendor/pocketjs/spec/spec.ts";
 
 const HERE = new URL("../app/", import.meta.url).pathname; // app/ — baked outputs live beside the viewer
-const TILE = 256;
+const LOGICAL_TILE = 256;
 const SCREEN_W = 480; // PSP screen — the overview level must fit inside it
 const SCREEN_H = 272;
-const BUDGET = 6 * 1024 * 1024; // soft cap on total committed tile bytes
+const BASE_BUDGET = 6 * 1024 * 1024; // soft cap for density 1
 
 // Pages that aren't content: the kit's scratch canvas and an unnamed page.
 const isRealPage = (name: string): boolean => name.trim() !== "" && name !== "Internal Only Canvas";
@@ -69,14 +74,27 @@ const DEFAULT_MAX_SCALE = 1.0;
 // ---------------------------------------------------------------------------
 
 let figPath = homedir() + "/Downloads/Paper Wireframe Kit (Community).fig";
+let density = 1;
 for (const a of process.argv.slice(2)) {
   if (a.startsWith("--fig=")) figPath = a.slice("--fig=".length);
+  else if (a.startsWith("--density=")) density = Number(a.slice("--density=".length));
+  else {
+    console.error(`gen-assets: unknown argument ${a}`);
+    process.exit(1);
+  }
+}
+if (density !== 1 && density !== 2) {
+  console.error(`gen-assets: --density must be 1 or 2 (got ${density})`);
+  process.exit(1);
 }
 if (!existsSync(figPath)) {
   console.error(`gen-assets: ${figPath} not found — pass --fig=<path to .fig>`);
   console.error("(The .fig is not committed; the baked outputs under app/ are.)");
   process.exit(1);
 }
+const RASTER_TILE = LOGICAL_TILE * density;
+const densitySuffix = density === 1 ? "" : `@${density}x`;
+const budget = BASE_BUDGET * density * density;
 
 // ---------------------------------------------------------------------------
 // Color helpers
@@ -246,7 +264,7 @@ interface BakedPage {
 // Bake
 // ---------------------------------------------------------------------------
 
-console.log(`gen-assets: opening ${figPath}`);
+console.log(`gen-assets: opening ${figPath} (density ${density}x, ${LOGICAL_TILE} logical / ${RASTER_TILE} raster tile)`);
 const doc = await openFig(figPath);
 const pages = doc.pages.filter((p) => isRealPage(p.name) && p.bounds);
 console.log(`  pages: ${pages.map((p) => JSON.stringify(p.name)).join(", ")}`);
@@ -255,7 +273,10 @@ const tilesDir = HERE + "tiles/";
 mkdirSync(tilesDir, { recursive: true });
 // Re-runs must not leave stale pyramids behind (a cap change alters level counts).
 for (const f of readdirSync(tilesDir)) {
-  if (f.endsWith(".bin")) unlinkSync(tilesDir + f);
+  const isThisDensity = density === 1
+    ? f.endsWith(".bin") && !/@\d+x\.bin$/.test(f)
+    : f.endsWith(`${densitySuffix}.bin`);
+  if (isThisDensity) unlinkSync(tilesDir + f);
 }
 
 /** Filesystem-safe page slug: "👋 Welcome" -> "welcome". */
@@ -272,7 +293,8 @@ for (let p = 0; p < pages.length; p++) {
   const page = pages[p];
   const b = page.bounds!;
   // Snap content bounds to integer page px so every level's tile grid maps to
-  // exact pixel rects (scales are binary fractions; TILE/scale stays integral).
+  // exact logical rects (scales are binary fractions;
+  // LOGICAL_TILE/scale stays integral at every density).
   const ox = Math.floor(b.x);
   const oy = Math.floor(b.y);
   const w = Math.ceil(b.x + b.w) - ox;
@@ -291,9 +313,10 @@ for (let p = 0; p < pages.length; p++) {
 
   const levels: LevelBake[] = [];
   for (let l = 0; l < scales.length; l++) {
-    const scale = scales[l];
-    const cols = Math.ceil((w * scale) / TILE);
-    const rows = Math.ceil((h * scale) / TILE);
+    const scale = scales[l]; // logical page-px -> level-px scale
+    const rasterScale = scale * density;
+    const cols = Math.ceil((w * scale) / LOGICAL_TILE);
+    const rows = Math.ceil((h * scale) / LOGICAL_TILE);
     const tiles: TilesetTile[] = [];
     const grid: string[] = [];
     const solids: number[] = [];
@@ -301,19 +324,34 @@ for (let p = 0; p < pages.length; p++) {
     const texturedIdx: number[] = [];
     let sampleTile: { index: number; indices: Uint8Array } | null = null;
 
-    // Rasterize one TILE-high strip per row (a whole Examples level in one
-    // canvas would be ~500 MB; a strip tops out around ~14 MB) and slice it.
+    // Rasterize one logical-tile-high strip per row (a whole Examples level in
+    // one canvas would be enormous; strip memory stays bounded and grows with
+    // density²) and slice it.
     for (let r = 0; r < rows; r++) {
-      const strip = renderRegion(doc, page.index, ox, oy + (r * TILE) / scale, (cols * TILE) / scale, TILE / scale, scale);
+      const strip = renderRegion(
+        doc,
+        page.index,
+        ox,
+        oy + (r * LOGICAL_TILE) / scale,
+        (cols * LOGICAL_TILE) / scale,
+        LOGICAL_TILE / scale,
+        rasterScale,
+      );
+      if (strip.width !== cols * RASTER_TILE || strip.height !== RASTER_TILE) {
+        throw new Error(
+          `density ${density} level ${l} row ${r}: expected raster strip ` +
+            `${cols * RASTER_TILE}x${RASTER_TILE}, got ${strip.width}x${strip.height}`,
+        );
+      }
       const stripPx = new Uint32Array(strip.rgba.buffer, strip.rgba.byteOffset, strip.width * strip.height);
       let rowChars = "";
       for (let c = 0; c < cols; c++) {
         // Uniformity scan straight off the strip (no tile copy for solids).
-        const first = stripPx[c * TILE];
+        const first = stripPx[c * RASTER_TILE];
         let uniform = true;
-        for (let y = 0; y < TILE && uniform; y++) {
-          const base = y * strip.width + c * TILE;
-          for (let x = 0; x < TILE; x++) {
+        for (let y = 0; y < RASTER_TILE && uniform; y++) {
+          const base = y * strip.width + c * RASTER_TILE;
+          for (let x = 0; x < RASTER_TILE; x++) {
             if (stripPx[base + x] !== first) {
               uniform = false;
               break;
@@ -335,7 +373,10 @@ for (let p = 0; p < pages.length; p++) {
             if (ch === undefined) {
               // > 52 distinct solid colors in one level (never happens on the
               // kit): demote to a textured tile so the grid stays truthful.
-              tiles[tiles.length - 1] = { kind: "pixels", indices: new Uint8Array(TILE * TILE).fill(idx) };
+              tiles[tiles.length - 1] = {
+                kind: "pixels",
+                indices: new Uint8Array(RASTER_TILE * RASTER_TILE).fill(idx),
+              };
               texturedIdx.push(tiles.length - 1);
               rowChars += "#";
             } else {
@@ -343,11 +384,11 @@ for (let p = 0; p < pages.length; p++) {
             }
           }
         } else {
-          const indices = new Uint8Array(TILE * TILE);
-          for (let y = 0; y < TILE; y++) {
-            const base = y * strip.width + c * TILE;
-            for (let x = 0; x < TILE; x++) {
-              indices[y * TILE + x] = nearestIndex(pal, stripPx[base + x] & 0xffffff);
+          const indices = new Uint8Array(RASTER_TILE * RASTER_TILE);
+          for (let y = 0; y < RASTER_TILE; y++) {
+            const base = y * strip.width + c * RASTER_TILE;
+            for (let x = 0; x < RASTER_TILE; x++) {
+              indices[y * RASTER_TILE + x] = nearestIndex(pal, stripPx[base + x] & 0xffffff);
             }
           }
           tiles.push({ kind: "pixels", indices });
@@ -366,8 +407,8 @@ for (let p = 0; p < pages.length; p++) {
     }
 
     const blob = encodeTilesetEntry({
-      tileW: TILE,
-      tileH: TILE,
+      tileW: RASTER_TILE,
+      tileH: RASTER_TILE,
       cols,
       rows,
       flags: TILESET_FLAG_RLE | TILESET_FLAG_LINEAR,
@@ -376,7 +417,7 @@ for (let p = 0; p < pages.length; p++) {
     });
     selfCheck(blob, cols, rows, sampleTile);
 
-    const file = `tiles/${slug(page.name)}.${l}.bin`;
+    const file = `tiles/${slug(page.name)}.${l}${densitySuffix}.bin`;
     await Bun.write(HERE + file, blob);
     totalBytes += blob.length;
     levels.push({
@@ -392,7 +433,8 @@ for (let p = 0; p < pages.length; p++) {
       solid: cols * rows - texturedIdx.length,
     });
     console.log(
-      `  level ${l}: scale ${scale}, ${cols}x${rows} = ${cols * rows} tiles ` +
+      `  level ${l}: logical scale ${scale}, raster scale ${rasterScale}, ` +
+        `${cols}x${rows} = ${cols * rows} tiles ` +
         `(${texturedIdx.length} textured, ${cols * rows - texturedIdx.length} solid), ${(blob.length / 1024).toFixed(1)} KB`,
     );
   }
@@ -415,8 +457,13 @@ function selfCheck(blob: Uint8Array, cols: number, rows: number, sample: { index
   const off = dv.getUint32(e, true);
   const len = dv.getUint32(e + 4, true);
   if (len === 0) throw new Error(`self-check: tile ${sample.index} should be a pixel stream`);
-  const decoded = packbitsDecode(blob.subarray(dataOff + off, dataOff + off + len), TILE * TILE);
-  if (!decoded || decoded.length !== TILE * TILE) throw new Error(`self-check: tile ${sample.index} failed to decode`);
+  const decoded = packbitsDecode(
+    blob.subarray(dataOff + off, dataOff + off + len),
+    RASTER_TILE * RASTER_TILE,
+  );
+  if (!decoded || decoded.length !== RASTER_TILE * RASTER_TILE) {
+    throw new Error(`self-check: tile ${sample.index} failed to decode`);
+  }
   for (let i = 0; i < decoded.length; i++) {
     if (decoded[i] !== sample.indices[i]) throw new Error(`self-check: tile ${sample.index} mismatch at index ${i}`);
   }
@@ -429,21 +476,26 @@ function selfCheck(blob: Uint8Array, cols: number, rows: number, sample: { index
 const pakEntries = baked
   .flatMap((pg) => pg.levels.map((l) => ({ key: l.key, file: l.file })))
   .sort((a, b) => (a.key < b.key ? -1 : 1));
-await Bun.write(HERE + "pak.json", JSON.stringify(pakEntries, null, 2) + "\n");
+if (density === 1) {
+  await Bun.write(HERE + "pak.json", JSON.stringify(pakEntries, null, 2) + "\n");
+}
 
 // ---------------------------------------------------------------------------
 // tiles.ts — the manifest the viewer reads (no binary parsing at runtime)
 // ---------------------------------------------------------------------------
 
 const hex = (n: number): string => "0x" + (n >>> 0).toString(16).padStart(8, "0");
-let ts = `// AUTO-GENERATED by tools/gen-assets.ts (bun tools/gen-assets.ts).
+let ts = `// AUTO-GENERATED by tools/gen-assets.ts (bun tools/gen-assets.ts --density=${density}).
 // Deep-zoom tile manifest for the baked Figma pages. The viewer positions and
 // streams tiles from THIS data alone — solid tiles never touch the tileset
 // blobs (they draw as plain background/solids[] colored rects), only '#'
 // tiles go through the loadTileTexture op. Plain .ts (not *.generated.ts) so
 // the build's pass-1 scanner walks it.
+// Raster density ${density} uses ${RASTER_TILE}x${RASTER_TILE} physical tiles;
+// TILE and level.scale stay logical so layout, pan and zoom are target-neutral.
 
-export const TILE = ${TILE};
+export const RASTER_DENSITY = ${density} as const;
+export const TILE = ${LOGICAL_TILE};
 
 export interface FigLevel {
   /** page-px -> level-px scale; level pixel = (pageCoord - origin) * scale */
@@ -496,7 +548,8 @@ for (const pg of baked) {
   ts += `  },\n`;
 }
 ts += `];\n`;
-await Bun.write(HERE + "tiles.ts", ts);
+const manifestName = density === 1 ? "tiles.ts" : `tiles${densitySuffix}.ts`;
+await Bun.write(HERE + manifestName, ts);
 
 // ---------------------------------------------------------------------------
 // Size report
@@ -518,9 +571,12 @@ const pageTotals = baked.map((pg) => pg.levels.reduce((n, l) => n + l.bytes, 0))
 for (let i = 0; i < baked.length; i++) {
   console.log(`  total ${baked[i].name.padEnd(24)} ${(pageTotals[i] / 1024).toFixed(1).padStart(10)} KB`);
 }
-console.log(`  TOTAL ${(totalBytes / 1024 / 1024).toFixed(2)} MB (budget ${(BUDGET / 1024 / 1024).toFixed(0)} MB)`);
-if (totalBytes > BUDGET) {
+console.log(`  TOTAL ${(totalBytes / 1024 / 1024).toFixed(2)} MB (budget ${(budget / 1024 / 1024).toFixed(0)} MB)`);
+if (totalBytes > budget) {
   console.error("gen-assets: OVER BUDGET — lower a MAX_SCALE cap and re-run");
   process.exit(1);
 }
-console.log(`gen-assets: wrote ${pakEntries.length} tileset(s), pak.json, tiles.ts`);
+console.log(
+  `gen-assets: wrote ${pakEntries.length} density-${density} tileset(s), ${manifestName}` +
+    `${density === 1 ? ", pak.json" : " (pak.json/base untouched)"}`,
+);

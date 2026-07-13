@@ -1,0 +1,40 @@
+# pocket-figma-vita — Pocket Figma packaged as a native PS Vita VPK.
+#
+# This standalone crate stays outside any host Cargo workspace. Build it via
+# `bun run vita`; build.rs embeds the exact same JS bundle and pak as PSP,
+# desktop, web, and the deterministic application golden.
+
+[package]
+name = "pocket-figma-vita"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+build = "build.rs"
+
+[dependencies]
+pocketjs-vita = { path = "../../vendor/pocketjs/native-vita" }
+libquickjs-sys = { git = "https://github.com/doodlewind/quickjs-rs.git", rev = "ae957fd7820ad22e564aa72976a9bf7f7a9a8cac", optional = true }
+vitasdk-sys = { version = "0.3.3", features = [
+  "SceCtrl_stub",
+  "SceProcessmgr_stub",
+] }
+
+[features]
+# Compile deterministic scripted input + 960x544 framebuffer dumps for Vita3K.
+capture = ["pocketjs-vita/capture", "dep:libquickjs-sys"]
+# Rolling frame timing output for real-hardware validation.
+bench = ["pocketjs-vita/bench"]
+
+[package.metadata.vita]
+title_id = "PFIG00001"
+title_name = "Pocket Figma"
+assets = "static"
+build_std = "std,panic_abort"
+vita_make_fself_flags = ["-s"]
+vita_mksfoex_flags = ["-d", "ATTRIBUTE2=12"]
+
+[package.metadata.vita.profile.dev]
+strip_symbols = false
+
+[package.metadata.vita.profile.release]
+strip_symbols = false

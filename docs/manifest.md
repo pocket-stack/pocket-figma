@@ -1,99 +1,56 @@
-# `pocket.json` — the Pocket app manifest (format 1)
+# `pocket.json` — Pocket app contract (format 2)
 
-Every Pocket app carries one `pocket.json` at its repository root. It is the
-single machine-readable description of the app: what it is, what engine
-features it needs, how its assets bake, how each target builds, and how a
-store should present it. It plays the role `package.json` plays for npm and
-`AndroidManifest.xml` plays for Android — and it is designed for the two
-consumers coming next:
+`pocket.json` describes the portable contract between this application and a
+PocketJS target. It is strict data: the framework validates it, resolves a
+target profile, and writes one checksummed build plan before either the JS
+compiler or native toolchain runs.
 
-- **Pocket Studio** (macOS IDE): reads `app`, `assets`, and `targets` to
-  drive Run/Bake/Package buttons without executing project code.
-- **Pocket Store** (the UGC registry): reads `id`, `version`, `engine`, and
-  `store` to index, gate, and present published apps.
+Pocket Figma intentionally declares a PSP-shaped baseline rather than separate
+PSP and Vita applications:
 
-Design rules, in priority order:
+- a 480×272 logical canvas with `integer-fit` presentation;
+- baked glyph text;
+- physical buttons and one analog stick;
 
-1. **Pure data.** JSON, never executable. A store or IDE must be able to
-   parse a manifest from an untrusted archive without running anything.
-   (Build-time *behavior* — themes, keyframes — stays in `pocket.config.ts`;
-   the manifest may point at commands but never contains code.)
-2. **Two names, one identity.** `id` is a reverse-DNS string that never
-   changes across renames, forks stay distinguishable, and the store keys
-   everything on it. `name` is the human/registry slug (`pocket-figma`,
-   `pocket-notion`, `pocket-linear` — the `pocket-<product>` convention).
-3. **Capabilities are declared, not discovered.** Engines grow (deep-zoom
-   tile streaming and the analog nub arrived in pocketjs#81); a 2004 PSP
-   running an older EBOOT host cannot polyfill. `engine.capabilities` lets
-   the store filter incompatible apps *before* download and lets Studio warn
-   at edit time.
-4. **Baking is a first-class phase.** Pocket apps compile their runtime cost
-   away (`RUNTIMES.md` law: the device never parses, it only consumes).
-   `assets.bake` names the command; `assets.prebaked` names the committed
-   outputs so CI and the store can build without private sources;
-   `assets.sources` records provenance and licensing of what was baked in.
+The PSP profile satisfies that contract at 1×. The Vita profile satisfies the
+same contract on its 960×544 fullscreen output and resolves a raster density of
+2. The viewer selects its matching checked-in tile manifest through
+`platform.pixelRatio`; target names never enter application code. Touch is
+absent from both `requires` and `enhances`, so this version neither needs nor
+claims it.
 
-## Fields
+## Capabilities
 
-### Identity
+Capabilities are plain framework API identifiers. A target advertises only
+APIs its stock host has implemented and tested; the manifest's `requires`
+entries must all be present or resolution fails.
 
-| field | type | meaning |
-|---|---|---|
-| `pocket` | int | manifest format version. This document describes `1`. |
-| `id` | string | reverse-DNS, permanent. Store identity, save-data namespace, update lineage. |
-| `name` | string | kebab-case slug; registry/package/URL name. Convention: `pocket-<product>`. |
-| `title` | string | display name (XMB entry, Studio window, store page). |
-| `version` | semver | app version. The store enforces monotonic publishes per `id`. |
-| `description` / `authors` / `license` / `repository` | | as in npm. |
+The three requirements in this app are:
 
-### `engine`
+| capability |
+|---|
+| `text.glyphs.baked` |
+| `input.buttons` |
+| `input.analog.left` |
 
-| field | type | meaning |
-|---|---|---|
-| `pocketjs` | semver range | engine versions the bundle is built against. |
-| `capabilities` | string[] | host features the app cannot run without. Known today: `ui` (the 2D DrawList surface), `deepzoom` (TILESET streaming ops 23–25), `analog` (nub in the frame contract), `3d` (pocket3d surface). Registry grows append-only. |
+DrawList is PocketJS's internal core-to-backend rendering IR, not an API this
+application can observe or request, so it is intentionally not a capability.
+DeepZoom is implemented over the public host surface; it is not a separate
+platform capability.
 
-### `app`
+## Viewport and build boundary
 
-| field | type | meaning |
-|---|---|---|
-| `entry` | path | the mounting entry (calls `mount()`); what the bundler builds. |
-| `framework` | `solid` \| `vue-vapor` | JSX flavor, passed to the PocketJS build. |
-| `kind` | `viewer` \| `game` \| `tool` \| `toy` | coarse taxonomy; seeds store categories and Studio templates. |
-| `simulationHz` | int | the virtual-clock policy the app is tuned for (60 unless it opts down). |
+The application owns only its logical viewport and presentation intent. The
+selected target profile owns the physical display. Package metadata remains
+in the native PSP/Vita projects until a PocketJS backend actually consumes it.
 
-### `assets`
+Build behavior stays in `scripts/`. Both native build drivers ask the vendored
+PocketJS CLI to validate the manifest, run the ordinary reachable TypeScript
+check, and compile from `.pocket/<target>/plan.json`. The public
+`extractHostBuildInputs()` helper verifies the plan checksum and projects only
+the app output, target, ABI, and viewport required by a custom host. At boot
+PocketJS compares target and host ABI; the plan checksum is build-time
+consistency data, not a runtime trust mechanism.
 
-| field | type | meaning |
-|---|---|---|
-| `bake` | command | regenerates prebaked assets from sources. Studio's "Bake" button. |
-| `prebaked` | path[] | committed bake outputs; everything a build needs with no sources present. |
-| `sources` | object[] | provenance: `name`, `origin` URL, `author`, `license`, free-form `note`. The store surfaces these credits. |
-
-### `targets`
-
-One key per shipping target. Absence means "not supported" — Studio greys
-the run button, the store hides the download.
-
-- `psp`: `crate` (the EBOOT bin crate), `title` (PARAM.SFO, ≤128 bytes),
-  `icon0` (144×80 PNG shown in the XMB), `pic1` (480×272 PNG backdrop),
-  `memoryBudgetMb` (audited high-water the app promises to stay under —
-  the store shows it, hardware CI enforces it).
-- `desktop`: `host` — which vendored host runs it (`uihost` today).
-- `web`: `host` — `host-web` today.
-
-### `store`
-
-Presentation only — nothing here affects builds. `categories`, `tags`,
-`icon` (square, any size ≥256), `screenshots` (repo-relative paths),
-`privacy` (`network`/`storage`: `none` | `reads` | `writes` — a PSP app is
-usually `none`/`none`, and the store says so on the listing).
-
-## What the manifest is not
-
-- Not a lockfile: engine pinning is the submodule/lockfile's job; the range
-  in `engine.pocketjs` states *compatibility*, not resolution.
-- Not a build script: `targets.*` names crates and hosts; the repo's
-  `scripts/` own the how.
-- Not a config: runtime theme/keyframes stay in `pocket.config.ts` beside
-  the entry, evaluated at build time by the PocketJS compiler.
+Asset provenance, bake commands, store copy, and repository metadata stay in
+the README/package metadata rather than the platform compatibility contract.

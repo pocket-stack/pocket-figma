@@ -11,6 +11,8 @@
     "types": ["bun-types"],
     "paths": {
       "@pocketjs/framework": ["./vendor/pocketjs/src/index.ts"],
+      "@pocketjs/framework/solid": ["./vendor/pocketjs/src/index.ts"],
+      "@pocketjs/framework/input": ["./vendor/pocketjs/src/input-api.ts"],
       "@pocketjs/framework/*": ["./vendor/pocketjs/src/*"]
     }
   },
