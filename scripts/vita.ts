@@ -11,6 +11,7 @@ import {
   compilePocketTarget,
   nativePlanEnvironment,
 } from "./pocket-plan.ts";
+import { packageVitaVpk } from "../vendor/pocketjs/scripts/vita-package.ts";
 
 const repo = new URL("..", import.meta.url).pathname;
 const home = process.env.HOME ?? "";
@@ -88,6 +89,22 @@ if (!artifact) {
   );
   process.exit(1);
 }
+
+const stem = artifact.slice(0, -".vpk".length);
+const sfo = `${stem}.sfo`;
+const eboot = `${stem}.self`;
+if (![sfo, eboot].every(existsSync)) {
+  console.error(`cargo-vita completed but package inputs are incomplete under ${targetDirectory}`);
+  process.exit(1);
+}
+
+await packageVitaVpk({
+  tool: `${vitaSdk}/bin/vita-pack-vpk`,
+  sfo,
+  eboot,
+  output: artifact,
+  applicationAssets: `${crate}static`,
+});
 
 const packaged = `${repo}dist/vita/PocketFigma.vpk`;
 mkdirSync(`${repo}dist/vita`, { recursive: true });

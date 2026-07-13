@@ -28,7 +28,8 @@ bench = ["pocketjs-vita/bench"]
 [package.metadata.vita]
 title_id = "PFIG00001"
 title_name = "Pocket Figma"
-assets = "static"
+# scripts/vita.ts passes static/ to PocketJS's shared final packer. Figma's
+# branded LiveArea overlays framework defaults through one packaging contract.
 build_std = "std,panic_abort"
 vita_make_fself_flags = ["-s"]
 vita_mksfoex_flags = ["-d", "ATTRIBUTE2=12"]

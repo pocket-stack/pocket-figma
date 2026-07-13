@@ -14,6 +14,7 @@
     "golden": "bun test/golden.ts",
     "golden:update": "UPDATE=1 bun test/golden.ts",
     "e2e:vita": "bun scripts/e2e-vita.ts",
+    "test:vita-package": "bun test test/vita-package.test.ts",
     "test:psp-toolchain": "bun test test/psp-toolchain.test.ts",
     "cover": "bun tools/gen-cover.ts"
   }

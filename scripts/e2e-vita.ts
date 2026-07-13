@@ -24,7 +24,10 @@ import {
   rmSync,
 } from "node:fs";
 import { resolve } from "node:path";
+import { VITA_REQUIRED_SYSTEM_ASSETS } from "../vendor/pocketjs/scripts/vita-package.ts";
 import { encodePNG } from "../vendor/pocketjs/test/png.ts";
+
+const vitaSystemAssets = new Set<string>(VITA_REQUIRED_SYSTEM_ASSETS);
 
 const repo = new URL("..", import.meta.url).pathname;
 const home = process.env.HOME ?? "";
@@ -266,9 +269,15 @@ function installVpk(vpk: string): void {
   if (result.exitCode !== 0) {
     throw new Error(`VPK extraction failed: ${result.stderr.toString()}`);
   }
-  for (const required of ["eboot.bin", "sce_sys/param.sfo"]) {
+  for (const required of ["eboot.bin", "sce_sys/param.sfo", ...VITA_REQUIRED_SYSTEM_ASSETS]) {
     if (!existsSync(`${appDir}/${required}`)) {
       throw new Error(`VPK is missing ${required}`);
+    }
+    if (vitaSystemAssets.has(required) &&
+        !readFileSync(`${appDir}/${required}`).equals(
+          readFileSync(`${repo}crates/pocket-figma-vita/static/${required}`),
+        )) {
+      throw new Error(`VPK ${required} does not match Pocket Figma's package artwork`);
     }
   }
 }
