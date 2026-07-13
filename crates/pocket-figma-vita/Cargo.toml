@@ -13,7 +13,7 @@ build = "build.rs"
 
 [dependencies]
 pocketjs-vita = { path = "../../vendor/pocketjs/native-vita" }
-libquickjs-sys = { git = "https://github.com/doodlewind/quickjs-rs.git", rev = "ae957fd7820ad22e564aa72976a9bf7f7a9a8cac", optional = true }
+libquickjs-sys = { git = "https://github.com/pocket-stack/quickjs-rs.git", rev = "0fc946fb670c0c29bc0135f510bcb0f595415a61", optional = true }
 vitasdk-sys = { version = "0.3.3", features = [
   "SceCtrl_stub",
   "SceProcessmgr_stub",

@@ -41,6 +41,7 @@ reference instance of the [Pocket app manifest](./docs/manifest.md).
 
 ```sh
 bun run setup         # submodules + vendored deps
+bun run bootstrap     # install the pinned PSP toolchain into the shared cache
 bun run bake          # regenerate committed 1x + 2x tile pyramids from the .fig
 bun run check:platforms  # validate the PSP baseline against PSP and Vita
 bun run build         # dist/main.js + dist/main.pak (bundle + baked tiles)
@@ -50,6 +51,15 @@ bun run desktop       # run windowed via the vendored uihost (wgpu)
 bun run golden        # byte-exact 960x544 controller/touch/fullscreen goldens
 bun run e2e:vita      # build the VPK and compare native Vita3K captures
 ```
+
+PSP builds resolve the normalized SDK in a fixed order: `PSP_SDK`, then
+`PSPDEV`, then Pocket's versioned shared cache at
+`$XDG_CACHE_HOME/pocket-stack/psp/sdk/sdk-noabicalls-normalized-2026-06-19/mipsel-sony-psp`
+(or the same path under `~/.cache`). Both SDK environment variables are then
+exported to the build, so Rust and QuickJS cannot silently select different
+toolchains. The SDK, `rust-psp`, and `quickjs-rs` sources and exact revisions
+come from PocketJS's single toolchain manifest and the `pocket-stack`
+organization repositories. No DreamCart checkout is required.
 
 The Vita target keeps PocketJS's 480×272 logical canvas while selecting the
 512-pixel (`@2x`) version of each 256-logical-pixel tile. Layout, pan and zoom
